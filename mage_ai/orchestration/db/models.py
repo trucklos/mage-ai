@@ -96,6 +96,10 @@ class PipelineSchedule(BaseModel):
         TIME = 'time'
         EVENT = 'event'
 
+    class RetryStrategy(str, enum.Enum):
+        CONSTANT = 'constant'
+        EXPONENTIAL_BACKOFF = 'exponential_backoff'
+
     name = Column(String(255))
     pipeline_uuid = Column(String(255))
     schedule_type = Column(Enum(ScheduleType))
@@ -103,6 +107,10 @@ class PipelineSchedule(BaseModel):
     schedule_interval = Column(String(50))
     status = Column(Enum(ScheduleStatus), default=ScheduleStatus.INACTIVE)
     variables = Column(JSON)
+
+    retries = Column(Integer, default=3)
+    retry_delay = Column(Integer, default=30)
+    retry_strategy = Column(RetryStrategy, default=RetryStrategy.CONSTANT)
 
     pipeline_runs = relationship('PipelineRun', back_populates='pipeline_schedule')
 
@@ -165,6 +173,7 @@ class PipelineRun(BaseModel):
     status = Column(Enum(PipelineRunStatus), default=PipelineRunStatus.INITIAL)
     completed_at = Column(DateTime(timezone=True))
     variables = Column(JSON)
+    retry_count = Column(Integer, default=0)
 
     pipeline_schedule = relationship(PipelineSchedule, back_populates='pipeline_runs')
     block_runs = relationship('BlockRun', back_populates='pipeline_run')
@@ -222,6 +231,7 @@ class BlockRun(BaseModel):
     block_uuid = Column(String(255))
     status = Column(Enum(BlockRunStatus), default=BlockRunStatus.INITIAL)
     completed_at = Column(DateTime(timezone=True))
+    retry_count = Column(Integer, default=0)
 
     pipeline_run = relationship(PipelineRun, back_populates='block_runs')
 
