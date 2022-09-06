@@ -34,7 +34,7 @@ variable "cidr" {
 
 variable "docker_image" {
   description = "Docker image url used in ECS task."
-  default     = "mageai/mageai:latest"
+  default     = "mageai/mageai-event-trigger-test:with-event-trigger"
 }
 
 variable "ecs_task_cpu" {
