@@ -21,6 +21,8 @@ from mage_ai.shared.dates import compare
 from mage_ai.shared.hash import merge_dict
 from mage_ai.shared.retry import retry
 from typing import Any, Dict, List
+import asyncio
+import functools
 import json
 import pytz
 import traceback
@@ -301,9 +303,14 @@ def run_integration_pipeline(
     data_loader_block = integration_pipeline.data_loader
     data_exporter_block = integration_pipeline.data_exporter
 
-    for stream in integration_pipeline.streams():
+    all_streams = integration_pipeline.streams()
+    parallel_streams = list(filter(lambda s: s.get('run_in_parallel'), all_streams))
+    sequential_streams = list(filter(lambda s: not s.get('run_in_parallel'), all_streams))
+
+    for stream in parallel_streams + sequential_streams:
         tap_stream_id = stream['tap_stream_id']
         destination_table = stream.get('destination_table', tap_stream_id)
+        run_in_parallel = stream.get('run_in_parallel')
 
         block_runs_for_stream = list(filter(lambda br: tap_stream_id in br.block_uuid, block_runs))
         indexes = [0]
@@ -363,36 +370,71 @@ def run_integration_pipeline(
                 (data_exporter_block_run, shared_dict),
             ]
 
-            outputs = []
-            for idx2, tup in enumerate(block_runs_and_configs):
-                block_run, template_runtime_configuration = tup
-
-                tags_updated = merge_dict(tags, dict(
-                    block_run_id=block_run.id,
-                    block_uuid=block_run.block_uuid,
-                ))
-                block_run.update(
-                    started_at=datetime.now(),
-                    status=BlockRun.BlockRunStatus.RUNNING,
-                )
-                pipeline_scheduler.logger.info(
-                    f'Start a process for BlockRun {block_run.id}',
-                    **tags_updated,
-                )
-
-                output = run_block(
+            asyncio.run(
+                run_integration_blocks(
                     pipeline_run_id,
-                    block_run.id,
+                    block_runs_and_configs,
+                    pipeline_scheduler,
+                    tags,
                     variables,
-                    tags_updated,
-                    input_from_output=outputs[idx2 - 1] if idx2 >= 1 else None,
-                    pipeline_type=PipelineType.INTEGRATION,
-                    verify_output=False,
-                    runtime_arguments=runtime_arguments,
-                    schedule_after_complete=False,
-                    template_runtime_configuration=template_runtime_configuration,
+                    runtime_arguments,
+                    run_in_parallel=run_in_parallel,
                 )
-                outputs.append(output)
+            )
+
+
+async def run_integration_blocks(
+    *args,
+    run_in_parallel=False,
+):
+    if run_in_parallel:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            functools.partial(__run_integration_blocks, *args),
+        )
+    else:
+        return __run_integration_blocks(*args)
+
+
+def __run_integration_blocks(
+    pipeline_run_id,
+    block_runs_and_configs,
+    pipeline_scheduler,
+    tags,
+    variables,
+    runtime_arguments,
+):
+    outputs = []
+    for idx2, tup in enumerate(block_runs_and_configs):
+        block_run, template_runtime_configuration = tup
+
+        tags_updated = merge_dict(tags, dict(
+            block_run_id=block_run.id,
+            block_uuid=block_run.block_uuid,
+        ))
+        block_run.update(
+            started_at=datetime.now(),
+            status=BlockRun.BlockRunStatus.RUNNING,
+        )
+        pipeline_scheduler.logger.info(
+            f'Start a process for BlockRun {block_run.id}',
+            **tags_updated,
+        )
+
+        output = run_block(
+            pipeline_run_id,
+            block_run.id,
+            variables,
+            tags_updated,
+            input_from_output=outputs[idx2 - 1] if idx2 >= 1 else None,
+            pipeline_type=PipelineType.INTEGRATION,
+            verify_output=False,
+            runtime_arguments=runtime_arguments,
+            schedule_after_complete=False,
+            template_runtime_configuration=template_runtime_configuration,
+        )
+        outputs.append(output)
 
 
 def run_block(
