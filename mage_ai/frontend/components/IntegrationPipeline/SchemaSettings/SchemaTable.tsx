@@ -79,6 +79,7 @@ function SchemaTable({
     metadata,
     partition_keys: partitionKeys,
     replication_method: replicationMethod,
+    run_in_parallel: runInParallel,
     schema: {
       properties,
     },
@@ -459,6 +460,28 @@ function SchemaTable({
         <Headline condensed level={4} spacingBelow>
           Settings
         </Headline>
+
+        <Spacing mb={SPACING_BOTTOM_UNITS}>
+          <Spacing mb={1}>
+            <FlexContainer alignItems="center" flexWrap="wrap">
+              <Text bold large>
+                Run stream in parallel
+              </Text>
+              <Spacing ml={1} />
+              <Checkbox
+                checked={runInParallel}
+                key={`${streamUUID}/run_in_parallel`}
+                onClick={() => updateStream(streamUUID, (stream: StreamType) => {
+                  stream.run_in_parallel = !runInParallel;
+                  return stream;
+                })}
+              />
+            </FlexContainer>
+            <Text default>
+              Parallel streams will be run at the same time, so make sure there are no dependencies between them.
+            </Text>
+          </Spacing>
+        </Spacing>
 
         <Spacing mb={SPACING_BOTTOM_UNITS}>
           <Spacing mb={1}>

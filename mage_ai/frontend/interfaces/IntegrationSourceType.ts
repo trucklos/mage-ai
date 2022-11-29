@@ -88,6 +88,7 @@ export interface StreamType {
   partition_keys: string[];
   replication_key: string;
   replication_method: ReplicationMethodEnum;
+  run_in_parallel?: boolean;
   schema: SchemaType;
   stream: string;
   tap_stream_id: string;
